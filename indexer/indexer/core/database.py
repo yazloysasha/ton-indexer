@@ -14,6 +14,7 @@ from sqlalchemy import Column, String, Integer, BigInteger, Boolean, Index, Enum
 from sqlalchemy.schema import ForeignKeyConstraint
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import text
 
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import JSONB
@@ -227,6 +228,7 @@ class ActionAccount(Base):
 class Action(Base):
     __tablename__ = 'actions'
 
+    serial_id: int = Column(BigInteger, nullable=False, unique=True, server_default=text("nextval('action_serial_id_seq')"))
     trace_id: str = Column(String(44), nullable=False, primary_key=True)
     action_id: str = Column(String, nullable=False, primary_key=True)
     type: str = Column(String())
@@ -482,7 +484,7 @@ class Action(Base):
         r = self.__dict__.copy()
         r.pop('_sa_instance_state')
 
-        return convert_numerics_to_strings(r, {'start_lt', 'end_lt', 'start_utime', 'end_utime', 'opcode',
+        return convert_numerics_to_strings(r, {'serial_id', 'start_lt', 'end_lt', 'start_utime', 'end_utime', 'opcode',
                                                'trace_end_lt', 'trace_end_utime', 'mc_seqno_end', 'trace_mc_seqno_end'})
 
 class Transaction(Base):

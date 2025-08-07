@@ -86,6 +86,10 @@ void run_1_2_0_migrations(const std::string& connection_string, bool custom_type
 
     std::string query = "";
     query += (
+      "create sequence if not exists action_serial_id_seq;\n"
+    );
+
+    query += (
       "create table if not exists blocks ("
       "workchain integer not null, "
       "shard bigint  not null, "
@@ -248,8 +252,7 @@ void run_1_2_0_migrations(const std::string& connection_string, bool custom_type
       "balance_extra_currencies jsonb, "
       "account_status account_status_type, "
       "frozen_hash tonhash, "
-      "data_hash tonhash, "
-      "code_hash tonhash"
+      "data_hash tonhash"
       ");\n"
     );
 
@@ -505,6 +508,7 @@ void run_1_2_0_migrations(const std::string& connection_string, bool custom_type
     
     query += (
       "create table if not exists actions ("
+      "serial_id bigint not null unique default nextval('action_serial_id_seq'), "
       "trace_id tonhash not null, "
       "action_id tonhash not null, "
       "start_lt bigint, "
@@ -768,6 +772,54 @@ void run_1_2_1_migrations(const std::string& connection_string, bool dry_run) {
   LOG(INFO) << "Migration to version 1.2.1 completed successfully.";
 }
 
+void run_1_2_2_migrations(const std::string& pg_connection_string, bool dry_run) {
+  LOG(INFO) << "Running migrations to version 1.2.2";
+  
+  LOG(INFO) << "Adding serial_id to actions table...";
+  try {
+    pqxx::connection c(pg_connection_string);
+    pqxx::work txn(c);
+
+    std::string query = "";
+    
+    // Create sequence for action serial IDs
+    query += "CREATE SEQUENCE IF NOT EXISTS action_serial_id_seq;\n";
+    
+    // Add serial_id column to actions table
+    query += "ALTER TABLE actions ADD COLUMN IF NOT EXISTS serial_id BIGINT;\n";
+    
+    // Update existing records with serial_id based on trace_end_utime and end_utime
+    query += "UPDATE actions SET serial_id = nextval('action_serial_id_seq') WHERE serial_id IS NULL;\n";
+    
+    // Make serial_id not null after filling existing records
+    query += "ALTER TABLE actions ALTER COLUMN serial_id SET NOT NULL;\n";
+    
+    // Create unique index on serial_id
+    query += "CREATE UNIQUE INDEX IF NOT EXISTS actions_serial_id_idx ON actions (serial_id);\n";
+    
+    // Update version
+    query += (
+      "INSERT INTO ton_db_version (id, major, minor, patch) "
+      "VALUES (1, 1, 2, 2) ON CONFLICT(id) DO UPDATE "
+      "SET major = 1, minor = 2, patch = 2;\n"
+    );
+
+    if (dry_run) {
+      std::cout << query << std::endl;
+      return;
+    }
+
+    LOG(DEBUG) << query;
+    txn.exec(query).no_rows();
+    txn.commit();
+  } catch (const std::exception &e) {
+    LOG(ERROR) << "Error while migrating database: " << e.what();
+    std::exit(1);
+  }
+
+  LOG(INFO) << "Migration to version 1.2.2 completed successfully.";
+}
+
 void create_indexes(std::string connection_string, bool dry_run) {
   try {
     pqxx::connection c(connection_string);
@@ -951,6 +1003,10 @@ int main(int argc, char *argv[]) {
     if (migration_needed(current_version, Version{1, 2, 1}, rerun_last_migration)) {
       run_1_2_1_migrations(pg_connection_string, dry_run);
       current_version = Version{1, 2, 1};
+    }
+    if (migration_needed(current_version, Version{1, 2, 2}, rerun_last_migration)) {
+      run_1_2_2_migrations(pg_connection_string, dry_run);
+      current_version = Version{1, 2, 2};
     }
 
     // In future, more migrations will be added here

@@ -762,7 +762,7 @@ func buildJettonTransfersQuery(transfer_req JettonTransferRequest, utime_req Uti
 }
 
 func buildActionsQuery(act_req ActionRequest, utime_req UtimeRequest, lt_req LtRequest, lim_req LimitRequest, settings RequestSettings) (string, error) {
-	clmn_query_default := `A.trace_id, A.action_id, A.start_lt, A.end_lt, A.start_utime, A.end_utime, 
+	clmn_query_default := `A.serial_id, A.trace_id, A.action_id, A.start_lt, A.end_lt, A.start_utime, A.end_utime, 
 		A.trace_end_lt, A.trace_end_utime, A.trace_mc_seqno_end, A.source, A.source_secondary,
 		A.destination, A.destination_secondary, A.asset, A.asset_secondary, A.asset2, A.asset2_secondary, A.opcode, A.tx_hashes,
 		A.type, (A.ton_transfer_data).content, (A.ton_transfer_data).encrypted, A.value, A.amount,
@@ -947,8 +947,7 @@ func buildActionsQuery(act_req ActionRequest, utime_req UtimeRequest, lt_req LtR
 			orderby_query = fmt.Sprintf(" order by A.trace_end_utime %s, A.trace_id %s, A.end_utime %s, A.action_id %s",
 				sort_order, sort_order, sort_order, sort_order)
 		} else {
-			orderby_query = fmt.Sprintf(" order by A.trace_end_lt %s, A.trace_id %s, A.end_lt %s, A.action_id %s",
-				sort_order, sort_order, sort_order, sort_order)
+			orderby_query = fmt.Sprintf(" order by A.serial_id %s", sort_order)
 		}
 	}
 	filter_list = append(filter_list, "A.end_lt is not NULL")
@@ -3317,6 +3316,33 @@ func (db *DbClient) QueryActions(
 			return nil, nil, nil, IndexError{Code: 500, Message: err.Error()}
 		}
 	}
+	if act_req.IncludeAccounts != nil && *act_req.IncludeAccounts {
+		actions, err = queryActionsAccountsImpl(actions, conn)
+		if err != nil {
+			return nil, nil, nil, IndexError{Code: 500, Message: err.Error()}
+		}
+	}
+	if act_req.IncludeTransactions != nil && *act_req.IncludeTransactions {
+		actions, err = queryActionsTransactionsImpl(actions, conn, settings)
+		if err != nil {
+			return nil, nil, nil, IndexError{Code: 500, Message: err.Error()}
+		}
+	}
+	if len(addr_map) > 0 && !settings.NoAddressBook {
+		addr_list := []string{}
+		for k := range addr_map {
+			addr_list = append(addr_list, string(k))
+		}
+		book, err = QueryAddressBookImpl(addr_list, conn, settings)
+		if err != nil {
+			return nil, nil, nil, IndexError{Code: 500, Message: err.Error()}
+		}
+
+		metadata, err = QueryMetadataImpl(addr_list, conn, settings)
+		if err != nil {
+			return nil, nil, nil, IndexError{Code: 500, Message: err.Error()}
+		}
+	}
 	return actions, book, metadata, nil
 }
 
@@ -4027,4 +4053,71 @@ func queryVestingContractsImpl(query string, conn *pgxpool.Conn, settings Reques
 	}
 
 	return vestings, nil
+}
+
+func queryActionsTransactionsImpl(actions []Action, conn *pgxpool.Conn, settings RequestSettings) ([]Action, error) {
+	if len(actions) == 0 {
+		return actions, nil
+	}
+
+	// Collect unique tx_hashes from all actions
+	txHashSet := make(map[HashType]bool)
+	for _, action := range actions {
+		for _, txHash := range action.TxHashes {
+			txHashSet[txHash] = true
+		}
+	}
+
+	if len(txHashSet) == 0 {
+		return actions, nil
+	}
+
+	// Convert to slice for query
+	txHashes := make([]HashType, 0, len(txHashSet))
+	for txHash := range txHashSet {
+		txHashes = append(txHashes, txHash)
+	}
+
+	// Build query to get transactions
+	query := `SELECT T.account, T.hash, T.lt, T.block_workchain, T.block_shard, T.block_seqno, T.mc_block_seqno, 
+		T.trace_id, T.prev_trans_hash, T.prev_trans_lt, T.now, T.orig_status, T.end_status, T.total_fees, 
+		T.total_fees_extra_currencies, T.account_state_hash_before, T.account_state_hash_after, T.descr, 
+		T.aborted, T.destroyed, T.credit_first, T.is_tock, T.installed, T.storage_fees_collected, 
+		T.storage_fees_due, T.storage_status_change, T.credit_due_fees_collected, T.credit, 
+		T.credit_extra_currencies, T.compute_skipped, T.skipped_reason, T.compute_success, 
+		T.compute_msg_state_used, T.compute_account_activated, T.compute_gas_fees, T.compute_gas_used, 
+		T.compute_gas_limit, T.compute_gas_credit, T.compute_mode, T.compute_exit_code, 
+		T.compute_exit_arg, T.compute_vm_steps, T.compute_vm_init_state_hash, T.compute_vm_final_state_hash, 
+		T.action_success, T.action_valid, T.action_no_funds, T.action_status_change, 
+		T.action_total_fwd_fees, T.action_total_action_fees, T.action_result_code, T.action_result_arg, 
+		T.action_tot_actions, T.action_spec_actions, T.action_skipped_actions, T.action_msgs_created, 
+		T.action_action_list_hash, T.action_tot_msg_size_cells, T.action_tot_msg_size_bits, T.bounce, 
+		T.bounce_msg_size_cells, T.bounce_msg_size_bits, T.bounce_req_fwd_fees, T.bounce_msg_fees, 
+		T.bounce_fwd_fees, T.split_info_cur_shard_pfx_len, T.split_info_acc_split_depth, 
+		T.split_info_this_addr, T.split_info_sibling_addr, false as emulated 
+		FROM transactions as T WHERE ` + filterByArray("T.hash", txHashes)
+
+	transactions, err := queryTransactionsImpl(query, conn, settings)
+	if err != nil {
+		return nil, IndexError{Code: 500, Message: fmt.Sprintf("failed to query transactions: %s", err.Error())}
+	}
+
+	// Create map of transactions by hash for quick lookup
+	txMap := make(map[HashType]*Transaction)
+	for i := range transactions {
+		txMap[transactions[i].Hash] = &transactions[i]
+	}
+
+	// Add transactions to actions
+	for i := range actions {
+		actionTxs := make([]Transaction, 0, len(actions[i].TxHashes))
+		for _, txHash := range actions[i].TxHashes {
+			if tx, exists := txMap[txHash]; exists {
+				actionTxs = append(actionTxs, *tx)
+			}
+		}
+		actions[i].TransactionDetails = actionTxs
+	}
+
+	return actions, nil
 }

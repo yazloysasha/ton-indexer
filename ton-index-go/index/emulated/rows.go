@@ -128,6 +128,7 @@ type TraceRow struct {
 }
 
 type ActionRow struct {
+	SerialId                                             *int64
 	TraceId                                              *string
 	ActionId                                             string
 	StartLt                                              uint64
@@ -374,6 +375,7 @@ func (t *TraceRow) getAssigns() []assign {
 
 func (t *ActionRow) getAssigns() []assign {
 	return []assign{
+		assignIntPtr(t.SerialId),
 		assignStringPtr(t.TraceId),
 		assignString(t.ActionId),
 		assignInt(t.StartLt),

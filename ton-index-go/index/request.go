@@ -131,6 +131,7 @@ type ActionRequest struct {
 	ExcludeActionTypes   []string        `query:"exclude_action_type"`
 	SupportedActionTypes []string        `query:"supported_action_types"`
 	IncludeAccounts      *bool           `query:"include_accounts"`
+	IncludeTransactions  *bool           `query:"include_transactions"`
 }
 
 type BalanceChangesRequest struct {

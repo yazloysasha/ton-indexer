@@ -481,6 +481,7 @@ func (p *RawActionVaultExcessEntry) ScanIndex(i int) any {
 
 // traces
 type RawAction struct {
+	SerialId                                             *int64
 	TraceId                                              *HashType
 	ActionId                                             HashType
 	StartLt                                              int64
@@ -927,24 +928,26 @@ type ActionDetailsWithdrawStakeRequest struct {
 }
 
 type Action struct {
-	TraceId               *HashType   `json:"trace_id"`
-	ActionId              HashType    `json:"action_id"`
-	StartLt               int64       `json:"start_lt,string"`
-	EndLt                 int64       `json:"end_lt,string"`
-	StartUtime            int64       `json:"start_utime"`
-	EndUtime              int64       `json:"end_utime"`
-	TraceEndLt            int64       `json:"trace_end_lt,string"`
-	TraceEndUtime         int64       `json:"trace_end_utime"`
-	TraceMcSeqnoEnd       int32       `json:"trace_mc_seqno_end"`
-	TxHashes              []HashType  `json:"transactions"`
-	Success               *bool       `json:"success"`
-	Type                  string      `json:"type"`
-	Details               interface{} `json:"details"`
-	RawAction             *RawAction  `json:"raw_action,omitempty" swaggerignore:"true"`
-	TraceExternalHash     *HashType   `json:"trace_external_hash,omitempty"`
-	TraceExternalHashNorm *HashType   `json:"trace_external_hash_norm,omitempty"`
-	AncestorType          []string    `json:"-"`
-	Accounts              []string    `json:"accounts,omitempty"`
+	SerialId              *int64        `json:"serial_id,string,omitempty"`
+	TraceId               *HashType     `json:"trace_id"`
+	ActionId              HashType      `json:"action_id"`
+	StartLt               int64         `json:"start_lt,string"`
+	EndLt                 int64         `json:"end_lt,string"`
+	StartUtime            int64         `json:"start_utime"`
+	EndUtime              int64         `json:"end_utime"`
+	TraceEndLt            int64         `json:"trace_end_lt,string"`
+	TraceEndUtime         int64         `json:"trace_end_utime"`
+	TraceMcSeqnoEnd       int32         `json:"trace_mc_seqno_end"`
+	TxHashes              []HashType    `json:"transactions"`
+	Success               *bool         `json:"success"`
+	Type                  string        `json:"type"`
+	Details               interface{}   `json:"details"`
+	RawAction             *RawAction    `json:"raw_action,omitempty" swaggerignore:"true"`
+	TraceExternalHash     *HashType     `json:"trace_external_hash,omitempty"`
+	TraceExternalHashNorm *HashType     `json:"trace_external_hash_norm,omitempty"`
+	AncestorType          []string      `json:"-"`
+	Accounts              []string      `json:"accounts,omitempty"`
+	TransactionDetails    []Transaction `json:"transaction_details,omitempty"`
 } // @name Action
 
 type TraceMeta struct {

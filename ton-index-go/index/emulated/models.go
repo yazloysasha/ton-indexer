@@ -410,6 +410,7 @@ type actionCoffeeStakingWithdrawDetails struct {
 }
 
 type Action struct {
+	SerialId                  *int64                              `msgpack:"serial_id"`
 	ActionId                  string                              `msgpack:"action_id"`
 	Type                      string                              `msgpack:"type"`
 	TraceId                   *string                             `msgpack:"trace_id"`

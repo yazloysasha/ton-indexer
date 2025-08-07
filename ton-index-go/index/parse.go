@@ -305,6 +305,7 @@ func ParseWalletState(state AccountStateFull) (*WalletState, error) {
 func ParseRawAction(raw *RawAction) (*Action, error) {
 	var act Action
 
+	act.SerialId = raw.SerialId
 	act.TraceId = raw.TraceId
 	act.ActionId = raw.ActionId
 	act.StartLt = raw.StartLt
@@ -1205,7 +1206,7 @@ func ScanJettonBurn(row pgx.Row) (*JettonBurn, error) {
 
 func ScanRawAction(row pgx.Row) (*RawAction, error) {
 	var act RawAction
-	err := row.Scan(&act.TraceId, &act.ActionId, &act.StartLt, &act.EndLt, &act.StartUtime, &act.EndUtime,
+	err := row.Scan(&act.SerialId, &act.TraceId, &act.ActionId, &act.StartLt, &act.EndLt, &act.StartUtime, &act.EndUtime,
 		&act.TraceEndLt, &act.TraceEndUtime, &act.TraceMcSeqnoEnd,
 		&act.Source,
 		&act.SourceSecondary,

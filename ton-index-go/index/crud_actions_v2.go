@@ -68,6 +68,12 @@ func (db *DbClient) QueryActionsV2(
 			return nil, nil, nil, IndexError{Code: 500, Message: err.Error()}
 		}
 	}
+	if act_req.IncludeTransactions != nil && *act_req.IncludeTransactions {
+		actions, err = queryActionsTransactionsImpl(actions, conn, settings)
+		if err != nil {
+			return nil, nil, nil, IndexError{Code: 500, Message: err.Error()}
+		}
+	}
 	if len(addr_map) > 0 && !settings.NoAddressBook {
 		addr_list := []string{}
 		for k := range addr_map {
@@ -87,7 +93,7 @@ func (db *DbClient) QueryActionsV2(
 }
 
 func buildActionsQueryV2(act_req ActionRequest, utime_req UtimeRequest, lt_req LtRequest, lim_req LimitRequest, settings RequestSettings) (string, []any, error) {
-	clmn_query_default := `A.trace_id, A.action_id, A.start_lt, A.end_lt, A.start_utime, A.end_utime, 
+	clmn_query_default := `A.serial_id, A.trace_id, A.action_id, A.start_lt, A.end_lt, A.start_utime, A.end_utime, 
 		A.trace_end_lt, A.trace_end_utime, A.trace_mc_seqno_end, A.source, A.source_secondary,
 		A.destination, A.destination_secondary, A.asset, A.asset_secondary, A.asset2, A.asset2_secondary, A.opcode, A.tx_hashes,
 		A.type, (A.ton_transfer_data).content, (A.ton_transfer_data).encrypted, A.value, A.amount,
@@ -332,16 +338,14 @@ func buildActionsQueryV2(act_req ActionRequest, utime_req UtimeRequest, lt_req L
 			orderby_query = fmt.Sprintf(" order by AA.trace_end_utime %s, AA.trace_id %s, AA.action_end_utime %s, AA.action_id %s",
 				sort_order, sort_order, sort_order, sort_order)
 		} else {
-			orderby_query = fmt.Sprintf(" order by AA.trace_end_lt %s, AA.trace_id %s, AA.action_end_lt %s, AA.action_id %s",
-				sort_order, sort_order, sort_order, sort_order)
+			orderby_query = fmt.Sprintf(" order by A.serial_id %s", sort_order)
 		}
 	} else {
 		if order_by_now {
 			orderby_query = fmt.Sprintf(" order by A.trace_end_utime %s, A.trace_id %s, A.end_utime %s, A.action_id %s",
 				sort_order, sort_order, sort_order, sort_order)
 		} else {
-			orderby_query = fmt.Sprintf(" order by A.trace_end_lt %s, A.trace_id %s, A.end_lt %s, A.action_id %s",
-				sort_order, sort_order, sort_order, sort_order)
+			orderby_query = fmt.Sprintf(" order by A.serial_id %s", sort_order)
 		}
 	}
 	filter_list = append(filter_list, "A.end_lt is not NULL")
